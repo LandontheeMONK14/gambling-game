@@ -23,7 +23,11 @@ function toBrowserGlobal(source, globalName) {
       return `class ${name} `;
     });
 
-  return `${transformed}\nwindow.${globalName} = { ${exportNames.join(', ')} };\n`;
+  return `window.${globalName} = (() => {\n${transformed}\nreturn { ${exportNames.join(', ')} };\n})();\n`;
+}
+
+export function escapeInlineScript(source) {
+  return source.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
 }
 
 export function buildStandaloneHtml() {
@@ -35,9 +39,9 @@ export function buildStandaloneHtml() {
   const combinedRuntime = `${engine}\nwindow.__CASINO_HEAD_HTML__ = ${JSON.stringify('    <meta charset="UTF-8" />\n    <meta name="viewport" content="width=device-width, initial-scale=1.0" />\n    <title>Lucky Cascade Casino</title>')};\nwindow.__CASINO_BODY_HTML__ = ${JSON.stringify(shell)};\nwindow.__CASINO_STYLES__ = ${JSON.stringify(styles)};\nwindow.__CASINO_RUNTIME_SOURCE__ = ${JSON.stringify(`${engine}\n${runtime}`)};\n${runtime}`;
 
   return template
-    .replace('__INLINE_STYLE__', styles)
-    .replace('__APP_SHELL__', shell)
-    .replace('__BOOTSTRAP__', combinedRuntime);
+    .replace('__INLINE_STYLE__', () => styles)
+    .replace('__APP_SHELL__', () => shell)
+    .replace('__BOOTSTRAP__', () => escapeInlineScript(combinedRuntime));
 }
 
 export function writeStandaloneFiles() {

@@ -1,6 +1,13 @@
 const Engine = window.CasinoEngine;
 const prefersReducedMotion = typeof window.matchMedia === 'function' && window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-const persistence = Engine.createPersistence(typeof window !== 'undefined' ? window.localStorage : null);
+function getBrowserStorage() {
+  try {
+    return window.localStorage;
+  } catch {
+    return null;
+  }
+}
+const persistence = Engine.createPersistence(getBrowserStorage());
 const loaded = persistence.load();
 
 const state = {
@@ -279,6 +286,12 @@ function resetAllProgress() {
   announce('All progress reset.');
 }
 
+const SCRIPT_CLOSE_TAG = '<' + '/script>';
+
+function escapeInlineScript(source) {
+  return source.replace(/<\/(script)/gi, '<\\/$1').replace(/<!--/g, '<\\!--');
+}
+
 function buildStandaloneHtmlDocument() {
   const bootstrap = [
     `window.__CASINO_HEAD_HTML__ = ${JSON.stringify(window.__CASINO_HEAD_HTML__)};`,
@@ -288,7 +301,7 @@ function buildStandaloneHtmlDocument() {
     window.__CASINO_RUNTIME_SOURCE__,
   ].join('\n');
 
-  return `<!doctype html>\n<html lang="en">\n  <head>\n${window.__CASINO_HEAD_HTML__}\n    <style>\n${window.__CASINO_STYLES__}\n    </style>\n  </head>\n  <body>\n${window.__CASINO_BODY_HTML__}\n    <script>\n${bootstrap.replaceAll('</script>', '<\\/script>')}\n    <\\/script>\n  </body>\n</html>\n`;
+  return `<!doctype html>\n<html lang="en">\n  <head>\n${window.__CASINO_HEAD_HTML__}\n    <style>\n${window.__CASINO_STYLES__}\n    </style>\n  </head>\n  <body>\n${window.__CASINO_BODY_HTML__}\n    <script>\n${escapeInlineScript(bootstrap)}\n    ${SCRIPT_CLOSE_TAG}\n  </body>\n</html>\n`;
 }
 
 function downloadStandaloneHtml() {
