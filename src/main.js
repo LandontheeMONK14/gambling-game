@@ -17,6 +17,7 @@ const state = {
     storageAvailable: loaded.storageAvailable,
     migrated: loaded.migrated,
     slotsRound: null,
+    slotsLastSymbols: ['crown', 'gem', 'bell'],
     blackjackRound: null,
     blackjackShoe: Engine.createShoe(4),
     baccaratShoe: Engine.createShoe(6),
@@ -145,6 +146,17 @@ const els = {
   ownerSettingMarketing: document.querySelector('#setting-marketing'),
   ownerSettingHospitality: document.querySelector('#setting-hospitality'),
   ownerSettingMaintenance: document.querySelector('#setting-maintenance'),
+
+  balanceDelta: document.querySelector('#balance-delta'),
+  challengeMeter: document.querySelector('#challenge-meter'),
+  challengeList: document.querySelector('#challenge-list'),
+  challengeSetLabel: document.querySelector('#challenge-set-label'),
+  challengeSummary: document.querySelector('#challenge-summary'),
+  challengeNew: document.querySelector('#challenge-new'),
+  themePicker: document.querySelector('#theme-picker'),
+  effectsToggle: document.querySelector('#effects-toggle'),
+  soundToggle: document.querySelector('#sound-toggle'),
+  effectsNote: document.querySelector('#effects-note'),
 };
 
 function announce(message) {
@@ -166,6 +178,8 @@ function persist() {
     stats: state.stats,
     history: state.history,
     owner: state.owner,
+    challenges: state.challenges,
+    cosmetics: state.cosmetics,
   });
   renderSaveStatus(ok);
 }
@@ -190,7 +204,7 @@ function deltaText(totalReturn, stake) {
   return `${delta >= 0 ? '+' : ''}${delta}`;
 }
 
-function recordRound({ game, outcome, stake, totalReturn, text }) {
+function recordRound({ game, gameKey, outcome, stake, totalReturn, text, statusEl, message, detail = {} }) {
   state.stats.rounds += 1;
   state.stats.totalStaked += stake;
   state.stats.totalReturned += Math.round(totalReturn);
@@ -205,11 +219,141 @@ function recordRound({ game, outcome, stake, totalReturn, text }) {
     text,
   });
   state.history = Engine.sanitizeHistory(state.history);
+
+  // Settlement happens exactly once per round here, so challenge progress is keyed to the round id.
+  const progress = Engine.applyRoundToChallenges(state.challenges, {
+    roundId: state.stats.rounds,
+    gameKey,
+    outcome,
+    stake,
+    totalReturn,
+    detail,
+  });
+  state.challenges = progress.challenges;
+
   persist();
   renderSidebar();
+  renderHud();
+  renderChallenges();
+  if (progress.unlockedThemes.length) renderThemePicker();
+
+  const summary = Engine.summarizeRound({ outcome, stake, totalReturn });
+  if (statusEl) showRoundResult(statusEl, message ?? text, summary);
+  showBalanceDelta(summary);
+  celebrate(statusEl, summary, progress.newlyCompleted.length > 0);
+  playSound(progress.newlyCompleted.length ? 'challenge' : summary.big ? 'big' : summary.kind);
+  announce(buildRoundAnnouncement(game, message ?? text, summary, progress));
+  return summary;
+}
+
+function buildRoundAnnouncement(game, message, summary, progress) {
+  const parts = [`${game}: ${summary.label} chips. ${message} Balance ${state.playerChips.toLocaleString()} chips.`];
+  for (const id of progress.newlyCompleted) {
+    parts.push(`Challenge complete: ${Engine.CHALLENGE_POOL[id].title}!`);
+  }
+  if (progress.setCompleted) parts.push('Challenge card cleared! Start a new set whenever you like.');
+  for (const id of progress.unlockedThemes) {
+    parts.push(`New theme unlocked: ${Engine.COSMETIC_THEMES[id].label}.`);
+  }
+  return parts.join(' ');
+}
+
+function showRoundResult(element, message, summary) {
+  element.classList.remove('good', 'bad', 'celebrate');
+  element.classList.toggle('good', summary.kind === 'win');
+  element.classList.toggle('bad', summary.kind === 'loss');
+  element.replaceChildren();
+  const badge = document.createElement('span');
+  badge.className = `result-badge ${summary.kind}`;
+  badge.textContent = summary.label;
+  const text = document.createElement('span');
+  text.className = 'result-message';
+  text.textContent = ` ${message} `;
+  const math = document.createElement('span');
+  math.className = 'result-math';
+  math.textContent = summary.detail;
+  element.append(badge, text, math);
+  if (summary.kind === 'win' && effectsEnabled()) {
+    void element.offsetWidth;
+    element.classList.add('celebrate');
+  }
+}
+
+function effectsEnabled() {
+  return state.cosmetics.effects && !prefersReducedMotion;
+}
+
+let balanceDeltaTimer = null;
+function showBalanceDelta(summary) {
+  if (!els.balanceDelta) return;
+  window.clearTimeout(balanceDeltaTimer);
+  els.balanceDelta.className = `balance-delta ${summary.kind}`;
+  els.balanceDelta.textContent = summary.kind === 'even' ? '±0' : `${summary.net > 0 ? '+' : '−'}${Math.abs(summary.net)}`;
+  if (effectsEnabled()) {
+    balanceDeltaTimer = window.setTimeout(() => {
+      els.balanceDelta.textContent = '';
+      els.balanceDelta.className = 'balance-delta';
+    }, 2600);
+  }
+}
+
+function celebrate(statusEl, summary, challengeDone) {
+  if (!effectsEnabled() || !statusEl) return;
+  if (summary.kind !== 'win' && !challengeDone) return;
+  const panel = statusEl.closest('.game-panel');
+  if (!panel) return;
+  panel.querySelector('.confetti-layer')?.remove();
+  const layer = document.createElement('div');
+  layer.className = 'confetti-layer';
+  layer.setAttribute('aria-hidden', 'true');
+  const pieces = summary.big ? 36 : 22;
+  for (let index = 0; index < pieces; index += 1) {
+    const piece = document.createElement('span');
+    piece.className = `confetti-piece c${index % 4}`;
+    piece.style.left = `${(index * 37) % 100}%`;
+    piece.style.animationDelay = `${(index % 6) * 60}ms`;
+    layer.append(piece);
+  }
+  panel.append(layer);
+  window.setTimeout(() => layer.remove(), 1600);
+}
+
+let audioContext = null;
+function playSound(kind) {
+  if (!state.cosmetics.sound) return;
+  const AudioCtor = window.AudioContext || window.webkitAudioContext;
+  if (!AudioCtor) return;
+  const notes = {
+    win: [523, 784],
+    big: [523, 659, 784, 1046],
+    challenge: [659, 988, 1318],
+    even: [440],
+    loss: [247],
+  }[kind];
+  if (!notes) return;
+  try {
+    audioContext ??= new AudioCtor();
+    const start = audioContext.currentTime;
+    notes.forEach((frequency, index) => {
+      const oscillator = audioContext.createOscillator();
+      const gain = audioContext.createGain();
+      oscillator.type = 'triangle';
+      oscillator.frequency.value = frequency;
+      const at = start + index * 0.09;
+      gain.gain.setValueAtTime(0.0001, at);
+      gain.gain.exponentialRampToValueAtTime(0.06, at + 0.02);
+      gain.gain.exponentialRampToValueAtTime(0.0001, at + 0.22);
+      oscillator.connect(gain).connect(audioContext.destination);
+      oscillator.start(at);
+      oscillator.stop(at + 0.24);
+    });
+  } catch {
+    // Audio is optional; gameplay never depends on it.
+  }
 }
 
 function setStatus(element, message, type = '') {
+  element.classList.remove('celebrate');
   element.textContent = message;
   element.classList.toggle('good', type === 'good');
   element.classList.toggle('bad', type === 'bad');
@@ -277,6 +421,8 @@ function resetAllProgress() {
   state.stats = fresh.stats;
   state.history = fresh.history;
   state.owner = fresh.owner;
+  state.challenges = fresh.challenges;
+  state.cosmetics = { ...fresh.cosmetics, effects: state.cosmetics.effects, sound: state.cosmetics.sound };
   state.ui.blackjackShoe = Engine.createShoe(4);
   state.ui.baccaratShoe = Engine.createShoe(6);
   state.ui.sportsbookEvent = Engine.generateSportsEvent('horse');
@@ -360,7 +506,7 @@ function slotSymbolSvg(symbol) {
     star: '<svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#c4b5fd" d="m32 8 7.6 15.4L56 25.7 44 37.4l2.8 16.5L32 46 17.2 53.9 20 37.4 8 25.7l16.4-2.3L32 8Z"/></svg>',
     horseshoe: '<svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#86efac" d="M18 20a14 14 0 1 1 28 0v24a6 6 0 0 0 6 6h4v8h-4a14 14 0 0 1-14-14V20a6 6 0 1 0-12 0v24A14 14 0 0 1 12 58H8v-8h4a6 6 0 0 0 6-6V20Z"/></svg>',
   };
-  return `<div class="slot-reel">${svgs[symbol] ?? symbol}</div>`;
+  return `<div class="slot-reel" role="img" aria-label="${escapeHtml(symbol)}">${svgs[symbol] ?? escapeHtml(symbol)}</div>`;
 }
 
 function renderDie(value) {
@@ -379,6 +525,125 @@ function renderDie(value) {
 function renderHud() {
   els.playerBalance.textContent = state.playerChips.toLocaleString();
   els.casinoFunds.textContent = state.owner.funds.toLocaleString();
+  const done = state.challenges.goals.filter((goal) => goal.done).length;
+  els.challengeMeter.textContent = `${done} / ${state.challenges.goals.length}`;
+}
+
+function renderChallenges() {
+  const { goals, setNumber, completedTotal, setsCompleted } = state.challenges;
+  els.challengeSetLabel.textContent = `Set ${setNumber}`;
+  els.challengeList.replaceChildren(
+    ...goals.map((goal) => {
+      const definition = Engine.CHALLENGE_POOL[goal.id];
+      const item = document.createElement('li');
+      item.className = `challenge-item${goal.done ? ' done' : ''}`;
+      item.dataset.challenge = goal.id;
+      const progressId = `challenge-progress-${goal.id}`;
+      item.innerHTML = `
+        <div class="challenge-head">
+          <strong>${escapeHtml(definition.title)}</strong>
+          <span class="challenge-count">${goal.done ? '✓ Complete' : `${goal.progress} / ${definition.target}`}</span>
+        </div>
+        <p class="muted" id="${progressId}-desc">${escapeHtml(definition.description)}</p>
+        <progress id="${progressId}" max="${definition.target}" value="${goal.progress}" aria-describedby="${progressId}-desc" aria-label="${escapeHtml(definition.title)} progress"></progress>`;
+      return item;
+    }),
+  );
+  const nextTheme = Object.values(Engine.COSMETIC_THEMES).find((theme) => theme.requires > completedTotal);
+  const cleared = Engine.isChallengeSetComplete(state.challenges);
+  els.challengeSummary.textContent = [
+    cleared ? 'Card cleared! Pick a new set whenever you like.' : null,
+    `${completedTotal} challenge${completedTotal === 1 ? '' : 's'} completed · ${setsCompleted} card${setsCompleted === 1 ? '' : 's'} cleared.`,
+    nextTheme ? `Next theme (${nextTheme.label}) at ${nextTheme.requires}.` : 'Every theme unlocked!',
+  ]
+    .filter(Boolean)
+    .join(' ');
+  els.challengeSummary.classList.toggle('good', cleared);
+  els.challengeNew.textContent = cleared ? 'Start new challenge set' : 'Swap for a new challenge set';
+  renderHud();
+}
+
+function startNewChallenges() {
+  const cleared = Engine.isChallengeSetComplete(state.challenges);
+  state.challenges = Engine.startNewChallengeSet(state.challenges);
+  persist();
+  renderChallenges();
+  announce(
+    `${cleared ? 'New' : 'Swapped to a new'} challenge set ${state.challenges.setNumber}: ${state.challenges.goals
+      .map((goal) => Engine.CHALLENGE_POOL[goal.id].title)
+      .join(', ')}.`,
+  );
+}
+
+function applyTheme() {
+  document.documentElement.dataset.theme = state.cosmetics.theme;
+}
+
+function renderThemePicker() {
+  const { completedTotal } = state.challenges;
+  const legend = document.createElement('legend');
+  legend.textContent = 'Theme';
+  const options = Object.entries(Engine.COSMETIC_THEMES).map(([id, theme]) => {
+    const unlocked = Engine.isThemeUnlocked(id, completedTotal);
+    const label = document.createElement('label');
+    label.className = `theme-option${unlocked ? '' : ' locked'}`;
+    label.dataset.themeOption = id;
+    const input = document.createElement('input');
+    input.type = 'radio';
+    input.name = 'theme';
+    input.value = id;
+    input.checked = state.cosmetics.theme === id;
+    input.disabled = !unlocked;
+    const swatch = document.createElement('span');
+    swatch.className = `theme-swatch swatch-${id}`;
+    swatch.setAttribute('aria-hidden', 'true');
+    const name = document.createElement('span');
+    name.className = 'theme-name';
+    name.textContent = theme.label;
+    const note = document.createElement('small');
+    note.textContent = unlocked
+      ? theme.requires === 0
+        ? 'Default'
+        : 'Unlocked'
+      : `Locked · complete ${theme.requires} challenges (${completedTotal}/${theme.requires})`;
+    label.append(input, swatch, name, note);
+    return label;
+  });
+  els.themePicker.replaceChildren(legend, ...options);
+}
+
+function chooseTheme(themeId) {
+  const result = Engine.selectTheme(state.cosmetics, themeId, state.challenges.completedTotal);
+  if (!result.ok) {
+    announce(result.error);
+    renderThemePicker();
+    return;
+  }
+  state.cosmetics = result.cosmetics;
+  applyTheme();
+  persist();
+  announce(`${Engine.COSMETIC_THEMES[themeId].label} theme applied. Cosmetic only — odds and payouts are unchanged.`);
+}
+
+function renderEffectsControls() {
+  els.effectsToggle.checked = state.cosmetics.effects;
+  els.soundToggle.checked = state.cosmetics.sound;
+  els.effectsNote.textContent = prefersReducedMotion
+    ? 'Your device prefers reduced motion, so wins show as static badges without confetti or pops.'
+    : 'Celebrations are short, never flash, and only appear when you finish ahead.';
+}
+
+function setEffects(enabled) {
+  state.cosmetics = { ...state.cosmetics, effects: Boolean(enabled) };
+  persist();
+  announce(`Celebration effects ${enabled ? 'on' : 'off'}.`);
+}
+
+function setSound(enabled) {
+  state.cosmetics = { ...state.cosmetics, sound: Boolean(enabled) };
+  persist();
+  announce(`Sound effects ${enabled ? 'on' : 'muted'}.`);
+  if (enabled) playSound('win');
 }
 
 function renderSidebar() {
@@ -405,7 +670,7 @@ function renderSidebar() {
 
 function renderSlots() {
   const round = state.ui.slotsRound;
-  const symbols = round?.symbols ?? ['crown', 'gem', 'bell'];
+  const symbols = round?.symbols ?? state.ui.slotsLastSymbols;
   els.slotReels.classList.toggle('spinning', Boolean(round?.spinning) && !prefersReducedMotion);
   els.slotReels.innerHTML = symbols.map((symbol) => slotSymbolSvg(symbol)).join('');
   els.slotsSpin.disabled = Boolean(round?.spinning);
@@ -415,16 +680,24 @@ function renderSlots() {
 function settleSlotRound(round) {
   if (!round) return;
   const result = Engine.evaluateSlots(round.symbols, round.stake);
+  state.ui.slotsLastSymbols = round.symbols;
   state.ui.slotsRound = null;
   renderSlots();
   if (result.won) {
     applyPlayerReturn(result.totalReturn);
     const text = `${result.symbols.join(', ')} matched for x${result.profitMultiplier}.`;
-    recordRound({ game: 'Slots', outcome: 'win', stake: round.stake, totalReturn: result.totalReturn, text });
-    setStatus(els.slotsStatus, `Win — ${text}`, 'good');
+    recordRound({ game: 'Slots', gameKey: 'slots', outcome: 'win', stake: round.stake, totalReturn: result.totalReturn, text, statusEl: els.slotsStatus });
   } else {
-    recordRound({ game: 'Slots', outcome: 'lose', stake: round.stake, totalReturn: 0, text: 'No symbols matched.' });
-    setStatus(els.slotsStatus, 'No matching line this spin.', 'bad');
+    recordRound({
+      game: 'Slots',
+      gameKey: 'slots',
+      outcome: 'lose',
+      stake: round.stake,
+      totalReturn: 0,
+      text: 'No symbols matched.',
+      statusEl: els.slotsStatus,
+      message: 'No matching line this spin.',
+    });
   }
   persist();
   renderHud();
@@ -483,12 +756,13 @@ function revealScratch(index) {
     if (next.totalReturn > 0) applyPlayerReturn(next.totalReturn);
     recordRound({
       game: 'Scratch Card',
+      gameKey: 'scratch',
       outcome: next.outcome,
       stake: next.stake,
       totalReturn: next.totalReturn,
       text: next.message,
+      statusEl: els.scratchStatus,
     });
-    setStatus(els.scratchStatus, next.message, next.totalReturn > 0 ? 'good' : 'bad');
     persist();
     renderHud();
   } else {
@@ -510,19 +784,22 @@ function renderBlackjack() {
   els.blackjackStand.disabled = !round?.active;
 }
 
-function settleBlackjackRound(round) {
+function settleBlackjackRound(round, detail = {}) {
   if (round.totalReturn > 0) applyPlayerReturn(round.totalReturn);
+  renderBlackjack();
   recordRound({
     game: 'Blackjack',
+    gameKey: 'blackjack',
     outcome: round.outcome,
     stake: round.stake,
     totalReturn: round.totalReturn,
     text: `${round.message} ${deltaText(round.totalReturn, round.stake)}`,
+    statusEl: els.blackjackStatus,
+    message: round.message,
+    detail,
   });
-  renderBlackjack();
   persist();
   renderHud();
-  setStatus(els.blackjackStatus, round.message, round.totalReturn > 0 ? 'good' : round.outcome === 'push' ? '' : 'bad');
 }
 
 function blackjackDeal() {
@@ -533,8 +810,8 @@ function blackjackDeal() {
   state.ui.blackjackRound = round;
   state.ui.blackjackShoe = round.shoe;
   renderBlackjack();
-  setStatus(els.blackjackStatus, round.message, round.totalReturn > 0 ? 'good' : round.outcome === 'lose' ? 'bad' : '');
-  if (round.finished) settleBlackjackRound(round);
+  if (round.finished) settleBlackjackRound(round, { natural: true });
+  else setStatus(els.blackjackStatus, round.message);
 }
 
 function blackjackHit() {
@@ -552,7 +829,7 @@ function blackjackStand() {
   if (next?.ignored) return;
   state.ui.blackjackRound = next;
   state.ui.blackjackShoe = next.shoe;
-  settleBlackjackRound(next);
+  settleBlackjackRound(next, { stood: true });
 }
 
 function renderBaccarat(result = null) {
@@ -569,10 +846,18 @@ function playBaccarat(betOn) {
   state.ui.baccaratShoe = result.shoe;
   renderBaccarat(result);
   if (result.totalReturn > 0) applyPlayerReturn(result.totalReturn);
-  recordRound({ game: 'Baccarat', outcome: result.outcome, stake, totalReturn: result.totalReturn, text: result.message });
+  recordRound({
+    game: 'Baccarat',
+    gameKey: 'baccarat',
+    outcome: result.outcome,
+    stake,
+    totalReturn: result.totalReturn,
+    text: result.message,
+    statusEl: els.baccaratStatus,
+    detail: { betOn },
+  });
   persist();
   renderHud();
-  setStatus(els.baccaratStatus, result.message, result.totalReturn > 0 ? 'good' : result.outcome === 'lose' ? 'bad' : '');
 }
 
 function renderPoker() {
@@ -606,16 +891,25 @@ function togglePokerHold(index) {
 }
 
 function drawPoker() {
+  const heldCount = state.ui.pokerHold.size;
   const next = Engine.drawVideoPoker(state.ui.pokerRound, [...state.ui.pokerHold]);
   if (next?.ignored) return;
   state.ui.pokerRound = next;
   state.ui.pokerDeck = next.shoe;
   if (next.totalReturn > 0) applyPlayerReturn(next.totalReturn);
-  recordRound({ game: 'Video Poker', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message });
+  renderPoker();
+  recordRound({
+    game: 'Video Poker',
+    gameKey: 'poker',
+    outcome: next.outcome,
+    stake: next.stake,
+    totalReturn: next.totalReturn,
+    text: next.message,
+    statusEl: els.pokerStatus,
+    detail: { held: heldCount },
+  });
   persist();
   renderHud();
-  renderPoker();
-  setStatus(els.pokerStatus, next.message, next.totalReturn > 0 ? 'good' : 'bad');
 }
 
 function updateRouletteValueOptions() {
@@ -633,6 +927,10 @@ function updateRouletteValueOptions() {
   els.rouletteValue.innerHTML = options.map(([value, label]) => `<option value="${value}">${label}</option>`).join('');
 }
 
+function rouletteBetLabel(type) {
+  return (Engine.ROULETTE_BETS[type]?.label ?? type).toLowerCase();
+}
+
 function spinRoulette() {
   const stake = tryStake();
   if (!stake) return;
@@ -646,18 +944,19 @@ function spinRoulette() {
   els.rouletteResult.innerHTML = `<div class="wheel-number ${result.spin.color}">${result.spin.number}</div>`;
   recordRound({
     game: 'Roulette',
+    gameKey: 'roulette',
     outcome: result.won ? 'win' : 'lose',
     stake,
     totalReturn: result.totalReturn,
     text: `Wheel landed on ${result.spin.number} ${result.spin.color}.`,
+    statusEl: els.rouletteStatus,
+    message: result.won
+      ? `Wheel landed on ${result.spin.number} ${result.spin.color}. Winning ${rouletteBetLabel(bet.type)} bet paid x${result.profitMultiplier}.`
+      : `Wheel landed on ${result.spin.number} ${result.spin.color}.`,
+    detail: { betType: bet.type },
   });
   persist();
   renderHud();
-  setStatus(
-    els.rouletteStatus,
-    result.won ? `Winning ${bet.type} bet paid x${result.profitMultiplier}.` : `Wheel landed on ${result.spin.number} ${result.spin.color}.`,
-    result.won ? 'good' : 'bad',
-  );
 }
 
 function renderDice() {
@@ -687,10 +986,9 @@ function rollDiceAction() {
     return;
   }
   if (next.totalReturn > 0) applyPlayerReturn(next.totalReturn);
-  recordRound({ game: 'Risk Dice', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message });
+  recordRound({ game: 'Risk Dice', gameKey: 'dice', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message, statusEl: els.diceStatus, detail: { rollCount: next.rollCount } });
   persist();
   renderHud();
-  setStatus(els.diceStatus, next.message, next.totalReturn > 0 ? 'good' : 'bad');
 }
 
 function bankDiceAction() {
@@ -698,11 +996,10 @@ function bankDiceAction() {
   if (next?.ignored) return;
   state.ui.diceRound = next;
   if (next.totalReturn > 0) applyPlayerReturn(next.totalReturn);
-  recordRound({ game: 'Risk Dice', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message });
+  renderDice();
+  recordRound({ game: 'Risk Dice', gameKey: 'dice', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message, statusEl: els.diceStatus, detail: { rollCount: next.rollCount, banked: true } });
   persist();
   renderHud();
-  renderDice();
-  setStatus(els.diceStatus, next.message, next.totalReturn > 0 ? 'good' : 'bad');
 }
 
 function renderCraps() {
@@ -731,10 +1028,9 @@ function rollCrapsAction() {
     return;
   }
   if (next.totalReturn > 0) applyPlayerReturn(next.totalReturn);
-  recordRound({ game: 'Craps', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message });
+  recordRound({ game: 'Craps', gameKey: 'craps', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message, statusEl: els.crapsStatus, detail: { side: next.side } });
   persist();
   renderHud();
-  setStatus(els.crapsStatus, next.message, next.totalReturn > 0 ? 'good' : next.outcome === 'push' ? '' : 'bad');
 }
 
 function renderKeno() {
@@ -769,21 +1065,19 @@ function drawKeno() {
   if (!stake) return;
   const result = Engine.settleKeno(state.ui.kenoPicks, stake);
   if (result.totalReturn > 0) applyPlayerReturn(result.totalReturn);
+  els.kenoResults.innerHTML = result.draw.map((value) => `<span class="pill ${result.hits.includes(value) ? 'selected' : ''}">${value}</span>`).join('');
   recordRound({
     game: 'Keno',
+    gameKey: 'keno',
     outcome: result.outcome,
     stake,
     totalReturn: result.totalReturn,
     text: `${result.hits.length} hits from picks ${result.picks.join(', ')}.`,
+    statusEl: els.kenoStatus,
+    message: result.totalReturn > 0 ? `${result.hits.length} hits paid x${result.profitMultiplier}.` : `${result.hits.length} hits. No payout.`,
   });
   persist();
   renderHud();
-  els.kenoResults.innerHTML = result.draw.map((value) => `<span class="pill ${result.hits.includes(value) ? 'selected' : ''}">${value}</span>`).join('');
-  setStatus(
-    els.kenoStatus,
-    result.totalReturn > 0 ? `${result.hits.length} hits paid x${result.profitMultiplier}.` : `${result.hits.length} hits. No payout.`,
-    result.totalReturn > 0 ? 'good' : 'bad',
-  );
 }
 
 function renderBingo() {
@@ -827,10 +1121,9 @@ function drawBingo() {
     return;
   }
   if (next.totalReturn > 0) applyPlayerReturn(next.totalReturn);
-  recordRound({ game: 'Bingo', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message });
+  recordRound({ game: 'Bingo', gameKey: 'bingo', outcome: next.outcome, stake: next.stake, totalReturn: next.totalReturn, text: next.message, statusEl: els.bingoStatus });
   persist();
   renderHud();
-  setStatus(els.bingoStatus, next.message, next.totalReturn > 0 ? 'good' : 'bad');
 }
 
 function renderSportsbook() {
@@ -874,11 +1167,19 @@ function runSportsbookEvent() {
   if (!pending) return;
   const result = Engine.settleSportsbookBet(pending.event, pending.optionKey, pending.stake);
   if (result.totalReturn > 0) applyPlayerReturn(result.totalReturn);
-  recordRound({ game: pending.event.kind === 'horse' ? 'Horse Race' : 'Sports Match', outcome: result.outcome, stake: pending.stake, totalReturn: result.totalReturn, text: result.message });
+  state.ui.sportsbookBet = null;
+  recordRound({
+    game: pending.event.kind === 'horse' ? 'Horse Race' : 'Sports Match',
+    gameKey: pending.event.kind === 'horse' ? 'horse' : 'sports',
+    outcome: result.outcome,
+    stake: pending.stake,
+    totalReturn: result.totalReturn,
+    text: result.message,
+    statusEl: els.sportsbookStatus,
+    message: `${result.message} Winning side: ${result.winningOption.label}.`,
+  });
   persist();
   renderHud();
-  setStatus(els.sportsbookStatus, `${result.message} Winning side: ${result.winningOption.label}.`, result.totalReturn > 0 ? 'good' : 'bad');
-  state.ui.sportsbookBet = null;
   state.ui.sportsbookEvent = Engine.generateSportsEvent(els.sportsbookKind.value);
   renderSportsbook();
 }
@@ -1044,7 +1345,11 @@ function renderPaytables() {
 
 function renderEverything() {
   renderSaveStatus();
+  applyTheme();
   renderHud();
+  renderChallenges();
+  renderThemePicker();
+  renderEffectsControls();
   renderSidebar();
   renderSlots();
   renderScratch();
@@ -1125,6 +1430,12 @@ els.ownerSettingMarketing.addEventListener('input', (event) => updateOwnerSettin
 els.ownerSettingHospitality.addEventListener('input', (event) => updateOwnerSetting('hospitality', event.target.value));
 els.ownerSettingMaintenance.addEventListener('input', (event) => updateOwnerSetting('maintenance', event.target.value));
 els.ownerRunDay.addEventListener('click', runOwnerDay);
+els.challengeNew.addEventListener('click', startNewChallenges);
+els.themePicker.addEventListener('change', (event) => {
+  if (event.target.name === 'theme') chooseTheme(event.target.value);
+});
+els.effectsToggle.addEventListener('change', (event) => setEffects(event.target.checked));
+els.soundToggle.addEventListener('change', (event) => setSound(event.target.checked));
 
 renderPaytables();
 renderEverything();
