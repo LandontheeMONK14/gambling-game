@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Neon Lucky Arcade</title>
+    <link rel="stylesheet" href="/src/styles.css" />
+  </head>
+  <body>
+    <div class="bg-glow" aria-hidden="true"></div>
+    <main class="app">
+      <header class="topbar card">
+        <div>
+          <p class="eyebrow">FREE VIRTUAL CHIPS ONLY</p>
+          <h1>Neon Lucky Arcade</h1>
+          <p class="subtle">No real money, no purchases, no cash out — just arcade fun.</p>
+        </div>
+        <div class="bankroll">
+          <p>Chips</p>
+          <strong id="chip-balance">0</strong>
+        </div>
+      </header>
+
+      <section class="controls card">
+        <label for="wager-input">Wager (integer chips)</label>
+        <input id="wager-input" type="number" min="1" step="1" value="10" />
+        <button id="refill-btn" class="secondary">Free Refill + Reset Round</button>
+        <p class="subtle small">Payout tables show <strong>profit multipliers</strong>. Winners also get their original stake back.</p>
+      </section>
+
+      <section class="instructions card">
+        <h2>How to play</h2>
+        <p>Pick a game card below, choose a wager, and start a round. Your chip balance is shared across all games and saved locally in your browser.</p>
+        <ul>
+          <li>Slots: spin 3 reels and match symbols for multipliers.</li>
+          <li>Blackjack: beat the dealer without busting (dealer stands on 17).</li>
+          <li>Dice: keep rolling for bigger rewards, or bank before you bust.</li>
+        </ul>
+      </section>
+
+      <nav class="lobby" aria-label="Game selection">
+        <button class="game-card active" data-game="slots">🎰 Slots</button>
+        <button class="game-card" data-game="blackjack">🃏 Blackjack</button>
+        <button class="game-card" data-game="dice">🎲 Risk Dice</button>
+      </nav>
+
+      <section id="slots" class="game-panel card">
+        <h2>Neon Slots</h2>
+        <p class="subtle">Uniform random reels. Match all 3 symbols to win.</p>
+        <div class="reels" id="slot-reels" aria-live="polite">
+          <div class="reel">⭐</div><div class="reel">⭐</div><div class="reel">⭐</div>
+        </div>
+        <div class="row">
+          <button id="slots-spin">Spin</button>
+          <button id="slots-skip" class="secondary" hidden>Skip animation</button>
+        </div>
+        <table>
+          <caption>Slots paytable (profit multipliers)</caption>
+          <tbody id="slots-paytable"></tbody>
+        </table>
+        <p id="slots-status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section id="blackjack" class="game-panel card" hidden>
+        <h2>Blackjack</h2>
+        <p class="subtle">Dealer stands on all 17. No split/insurance/double.</p>
+        <div class="hands">
+          <div>
+            <h3>Dealer</h3>
+            <p id="dealer-hand">—</p>
+            <p id="dealer-score" class="subtle"></p>
+          </div>
+          <div>
+            <h3>You</h3>
+            <p id="player-hand">—</p>
+            <p id="player-score" class="subtle"></p>
+          </div>
+        </div>
+        <div class="row">
+          <button id="blackjack-deal">Deal</button>
+          <button id="blackjack-hit" class="secondary" disabled>Hit</button>
+          <button id="blackjack-stand" class="secondary" disabled>Stand</button>
+        </div>
+        <p id="blackjack-status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section id="dice" class="game-panel card" hidden>
+        <h2>Risk Dice</h2>
+        <p class="subtle">Bust if roll is ≤ threshold: 1st roll ≤1, 2nd ≤2, ... up to ≤5.</p>
+        <p id="dice-round" class="status">Start a round to push your luck.</p>
+        <div class="row">
+          <button id="dice-start">Start Round</button>
+          <button id="dice-roll" class="secondary" disabled>Roll</button>
+          <button id="dice-bank" class="secondary" disabled>Bank</button>
+        </div>
+        <table>
+          <caption>Dice profit progression by safe rolls</caption>
+          <tbody id="dice-paytable"></tbody>
+        </table>
+        <p id="dice-status" class="status" aria-live="polite"></p>
+      </section>
+
+      <section class="stats card">
+        <h2>Arcade stats</h2>
+        <p id="stats-summary">No rounds yet.</p>
+        <h3>Achievements</h3>
+        <ul id="achievements"></ul>
+        <h3>Recent rounds</h3>
+        <ul id="recent-rounds"></ul>
+      </section>
+
+      <p id="global-status" class="sr-only" aria-live="polite"></p>
+    </main>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>
