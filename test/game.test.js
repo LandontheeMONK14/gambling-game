@@ -1,115 +1,266 @@
 import { describe, expect, it } from 'vitest';
-import { applyPayout, placeWager, payoutFromProfit, validateWager } from '../src/game/wager.js';
-import { evaluateSlots } from '../src/game/slots.js';
 import {
-  blackjackHit,
-  blackjackStand,
-  isNatural,
-  resolveNaturals,
-  scoreHand,
-  settleBlackjack,
-} from '../src/game/blackjack.js';
-import { bankDice, rollDice, startDiceRound } from '../src/game/dice.js';
-import { DEFAULT_PERSISTED_STATE, createPersistence } from '../src/game/persistence.js';
+  BACCARAT_PAYOUTS,
+  STARTING_PLAYER_CHIPS,
+  createDefaultAppState,
+  createDefaultOwnerState,
+  createPersistence,
+  createScratchTicket,
+  drawBingoBall,
+  drawVideoPoker,
+  establishCasino,
+  evaluatePokerHand,
+  evaluateSlots,
+  hireStaff,
+  migrateLegacySave,
+  playBaccaratRound,
+  purchaseInstallation,
+  rollCraps,
+  runCasinoDay,
+  settleKeno,
+  settleRouletteBet,
+  settleScratchTicket,
+  startCrapsRound,
+  startVideoPokerRound,
+  totalReturnFromProfit,
+  transferPlayerToCasino,
+  updateCasinoSetting,
+  validateStake,
+} from '../src/game/casino-engine.js';
+import { buildStandaloneHtml } from '../src/build-standalone.js';
 
-describe('wager and bankroll', () => {
-  it('validates integer wager against balance', () => {
-    expect(validateWager(10, 20).ok).toBe(true);
-    expect(validateWager(2.5, 20).ok).toBe(false);
-    expect(validateWager(30, 20).ok).toBe(false);
-  });
+function card(rank, suit) {
+  return { rank, suit, id: `${rank}-${suit}-${Math.random()}` };
+}
 
-  it('places wager and applies payout safely', () => {
-    const placed = placeWager(100, 20);
-    expect(placed).toEqual({ ok: true, balance: 80, wager: 20 });
-    expect(applyPayout(80, payoutFromProfit(20, 2))).toBe(140);
-  });
-});
+function fillerCards(count) {
+  const suits = ['spades', 'hearts', 'clubs', 'diamonds'];
+  return Array.from({ length: count }, (_, index) => ({
+    rank: (index % 13) + 1,
+    suit: suits[index % suits.length],
+    id: `fill-${index}`,
+  }));
+}
 
-describe('slots payout', () => {
-  it('awards configured combo multipliers', () => {
-    const seven = evaluateSlots(['7️⃣', '7️⃣', '7️⃣'], 10);
-    expect(seven.won).toBe(true);
-    expect(seven.totalReturn).toBe(110);
+function rngFrom(values) {
+  let index = 0;
+  return () => {
+    const value = values[index] ?? values[values.length - 1] ?? 0;
+    index += 1;
+    return value;
+  };
+}
 
-    const miss = evaluateSlots(['🍒', '🍒', '🍋'], 10);
-    expect(miss.won).toBe(false);
-    expect(miss.totalReturn).toBe(0);
-  });
-});
-
-describe('blackjack rules', () => {
-  it('scores aces correctly and detects natural', () => {
-    expect(scoreHand([1, 9]).total).toBe(20);
-    expect(scoreHand([1, 9, 9]).total).toBe(19);
-    expect(isNatural([1, 13])).toBe(true);
-  });
-
-  it('resolves naturals, busts, pushes, and duplicate protection', () => {
-    const natural = resolveNaturals([1, 13], [10, 7], 11);
-    expect(natural.done).toBe(true);
-    expect(natural.totalReturn).toBe(28);
-
-    const push = settleBlackjack([10, 7], [9, 8], 25);
-    expect(push.outcome).toBe('push');
-    expect(push.totalReturn).toBe(25);
-
-    const busted = blackjackHit({ stake: 10, playerCards: [10, 9], dealerCards: [10, 2], finished: false }, () => 0.9);
-    expect(busted.outcome).toBe('lose');
-    expect(busted.finished).toBe(true);
-
-    const ignored = blackjackStand({ finished: true, playerCards: [], dealerCards: [], stake: 10 });
-    expect(ignored.ignored).toBe(true);
-  });
-});
-
-describe('risk dice', () => {
-  it('handles busting, banking, and duplicate action protection', () => {
-    const start = startDiceRound(50);
-    const bust = rollDice(start, () => 0);
-    expect(bust.outcome).toBe('lose');
-    expect(bust.totalReturn).toBe(0);
-
-    const start2 = startDiceRound(50);
-    const safe = rollDice(start2, () => 0.99);
-    const banked = bankDice(safe);
-    expect(banked.outcome).toBe('win');
-    expect(banked.totalReturn).toBeGreaterThan(50);
-
-    const ignored = rollDice({ ...banked, active: false }, () => 0.99);
-    expect(ignored.ignored).toBe(true);
+describe('wager safeguards', () => {
+  it('rejects invalid stakes and computes rounded profit returns', () => {
+    expect(validateStake(10, 100).ok).toBe(true);
+    expect(validateStake(2.5, 100).ok).toBe(false);
+    expect(validateStake(Infinity, 100).ok).toBe(false);
+    expect(validateStake(-4, 100).ok).toBe(false);
+    expect(totalReturnFromProfit(11, 0.95)).toBe(21);
   });
 });
 
-describe('persistence recovery', () => {
-  it('recovers from malformed/unavailable storage and avoids in-flight state', () => {
-    const badStorage = {
-      setItem() { throw new Error('nope'); },
-      getItem() { return '{oops'; },
-      removeItem() {},
+describe('game settlements', () => {
+  it('settles slot matches and roulette zero correctly', () => {
+    const slotWin = evaluateSlots(['crown', 'crown', 'crown'], 10);
+    expect(slotWin.won).toBe(true);
+    expect(slotWin.totalReturn).toBe(110);
+
+    const zeroLoss = settleRouletteBet({ type: 'color', value: 'red' }, { number: 0, color: 'green', parity: 'none' }, 25);
+    expect(zeroLoss.won).toBe(false);
+    expect(zeroLoss.totalReturn).toBe(0);
+
+    const zeroStraight = settleRouletteBet({ type: 'straight', value: '0', number: '0' }, { number: 0, color: 'green', parity: 'none' }, 10);
+    expect(zeroStraight.won).toBe(true);
+    expect(zeroStraight.totalReturn).toBe(360);
+  });
+
+  it('applies baccarat banker commission and tie pushes', () => {
+    const bankerShoe = [
+      card(2, 'hearts'),
+      card(4, 'clubs'),
+      card(3, 'spades'),
+      card(4, 'diamonds'),
+      ...fillerCards(20),
+    ];
+    const bankerResult = playBaccaratRound(10, 'banker', bankerShoe, () => 0);
+    expect(bankerResult.winner).toBe('banker');
+    expect(bankerResult.profitMultiplier).toBe(BACCARAT_PAYOUTS.banker);
+    expect(bankerResult.totalReturn).toBe(20);
+
+    const tieShoe = [
+      card(4, 'hearts'),
+      card(4, 'clubs'),
+      card(5, 'spades'),
+      card(3, 'diamonds'),
+      ...fillerCards(20),
+    ];
+    const tieResult = playBaccaratRound(10, 'player', tieShoe, () => 0);
+    expect(tieResult.winner).toBe('tie');
+    expect(tieResult.outcome).toBe('push');
+    expect(tieResult.totalReturn).toBe(10);
+  });
+
+  it('handles craps point cycles and dont-pass bar 12', () => {
+    const passStart = startCrapsRound(20, 'pass');
+    const pointSet = rollCraps(passStart, rngFrom([0.4, 0.4]));
+    expect(pointSet.point).toBe(6);
+    expect(pointSet.finished).toBe(false);
+
+    const passWin = rollCraps(pointSet, rngFrom([0.2, 0.6]));
+    expect(passWin.finished).toBe(true);
+    expect(passWin.outcome).toBe('win');
+    expect(passWin.totalReturn).toBe(40);
+
+    const dontPass = rollCraps(startCrapsRound(15, 'dont-pass'), rngFrom([0.99, 0.99]));
+    expect(dontPass.finished).toBe(true);
+    expect(dontPass.outcome).toBe('push');
+    expect(dontPass.totalReturn).toBe(15);
+  });
+
+  it('evaluates video poker hands and enforces single-settlement scratch tickets', () => {
+    const royal = evaluatePokerHand([
+      card(1, 'hearts'),
+      card(13, 'hearts'),
+      card(12, 'hearts'),
+      card(11, 'hearts'),
+      card(10, 'hearts'),
+    ]);
+    expect(royal.name).toBe('Royal Flush');
+    expect(royal.profitMultiplier).toBe(25);
+
+    const round = startVideoPokerRound(10, [
+      card(1, 'hearts'),
+      card(13, 'hearts'),
+      card(12, 'hearts'),
+      card(11, 'hearts'),
+      card(9, 'hearts'),
+      card(10, 'hearts'),
+      ...fillerCards(20),
+    ]);
+    const drawn = drawVideoPoker(round, [0, 1, 2, 3]);
+    expect(drawn.handName).toBe('Royal Flush');
+    expect(drawn.totalReturn).toBe(260);
+
+    const settled = settleScratchTicket({
+      ...createScratchTicket(10, () => 0),
+      symbols: ['gold', 'gold', 'gold', 'coin', 'bar', 'star', 'coin', 'bar', 'star'],
+      revealed: Array(9).fill(true),
+    });
+    expect(settled.totalReturn).toBe(90);
+    const secondSettle = settleScratchTicket(settled);
+    expect(secondSettle.ignored).toBe(true);
+  });
+
+  it('draws unique keno numbers and pays by hits', () => {
+    const result = settleKeno([1, 2, 3, 4, 5], 10, () => 0);
+    expect(new Set(result.draw).size).toBe(result.draw.length);
+    expect(result.hits).toEqual([1, 2, 3, 4, 5]);
+    expect(result.totalReturn).toBe(260);
+  });
+
+  it('lets bingo progress without duplicate draws', () => {
+    let round = {
+      active: true,
+      finished: false,
+      stake: 10,
+      card: [
+        [1, 2, 3, 4, 5],
+        [16, 17, 18, 19, 20],
+        [31, 32, 'FREE', 34, 35],
+        [46, 47, 48, 49, 50],
+        [61, 62, 63, 64, 65],
+      ],
+      drawnNumbers: [],
+      calls: 0,
+      totalReturn: 0,
+      outcome: null,
+      message: '',
     };
-    const persistence = createPersistence(badStorage);
-    const loaded = persistence.load();
-    expect(loaded).toEqual(DEFAULT_PERSISTED_STATE);
+
+    round = drawBingoBall(round, () => 0);
+    expect(round.drawnNumbers).toEqual([1]);
+    round = drawBingoBall(round, () => 0);
+    expect(round.drawnNumbers).toEqual([1, 2]);
+    expect(new Set(round.drawnNumbers).size).toBe(2);
+  });
+});
+
+describe('owner mode and persistence', () => {
+  it('moves funds, buys attractions, and runs simulated days with settings effects', () => {
+    const established = establishCasino(createDefaultOwnerState(), 'Casey', 'North Star').owner;
+    const transferred = transferPlayerToCasino(STARTING_PLAYER_CHIPS, established, 250);
+    expect(transferred.ok).toBe(true);
+    expect(transferred.playerChips).toBe(STARTING_PLAYER_CHIPS - 250);
+
+    let owner = transferred.owner;
+    owner = purchaseInstallation(owner, 'slotsMachine').owner;
+    owner = purchaseInstallation(owner, 'blackjackTable').owner;
+    owner = hireStaff(owner, 'dealer').owner;
+    owner = hireStaff(owner, 'host').owner;
+
+    const lowMarketing = updateCasinoSetting(owner, 'marketing', 0);
+    const highMarketing = updateCasinoSetting(owner, 'marketing', 3);
+    const lowResult = runCasinoDay(lowMarketing, () => 0.5);
+    const highResult = runCasinoDay(highMarketing, () => 0.5);
+
+    expect(lowResult.ok).toBe(true);
+    expect(highResult.ok).toBe(true);
+    expect(highResult.summary.visitors).toBeGreaterThan(lowResult.summary.visitors);
+    expect(highResult.owner.stats.daysRun).toBe(1);
+  });
+
+  it('migrates legacy saves and survives blocked storage', () => {
+    const migrated = migrateLegacySave({
+      balance: 321,
+      stats: { rounds: 5, wins: 2, losses: 2, pushes: 1, totalWagered: 50, totalReturned: 55 },
+      recentResults: [{ game: 'Slots', outcome: 'win', delta: 20, text: 'nice' }],
+    });
+    expect(migrated.playerChips).toBe(321);
+    expect(migrated.stats.totalStaked).toBe(50);
+    expect(migrated.history[0].game).toBe('Slots');
+
+    const blocked = createPersistence({
+      setItem() {
+        throw new Error('blocked');
+      },
+      getItem() {
+        return null;
+      },
+      removeItem() {},
+    });
+    const blockedLoad = blocked.load();
+    expect(blockedLoad.storageAvailable).toBe(false);
+    expect(blockedLoad.state).toEqual(createDefaultAppState());
 
     const memory = {
       data: new Map(),
-      setItem(key, val) { this.data.set(key, val); },
-      getItem(key) { return this.data.get(key) ?? null; },
-      removeItem(key) { this.data.delete(key); },
+      setItem(key, value) {
+        this.data.set(key, value);
+      },
+      getItem(key) {
+        return this.data.get(key) ?? null;
+      },
+      removeItem(key) {
+        this.data.delete(key);
+      },
     };
+    memory.setItem('neon-lucky-arcade-v1', JSON.stringify({ version: 1, state: { balance: 222 } }));
+    const migratedLoad = createPersistence(memory).load();
+    expect(migratedLoad.migrated).toBe(true);
+    expect(migratedLoad.state.playerChips).toBe(222);
+  });
+});
 
-    const good = createPersistence(memory);
-    good.save({
-      ...DEFAULT_PERSISTED_STATE,
-      balance: 100,
-      recentResults: [{ game: 'Slots', outcome: 'win', delta: 20, text: 'ok', activeRound: true }],
-      blackjackRound: { shouldNotPersist: true },
-    });
-
-    const loadedGood = good.load();
-    expect(loadedGood.balance).toBe(100);
-    expect(loadedGood.blackjackRound).toBeUndefined();
-    expect(loadedGood.recentResults[0].game).toBe('Slots');
+describe('standalone packaging', () => {
+  it('inlines the full app without external runtime references', () => {
+    const html = buildStandaloneHtml();
+    expect(html).toContain('Download HTML');
+    expect(html).toContain('window.__CASINO_RUNTIME_SOURCE__');
+    expect(html).toContain('<style>');
+    expect(html).not.toContain('<link rel="stylesheet"');
+    expect(html).not.toContain('src="/src/');
+    expect(html).not.toContain('type="module" src=');
   });
 });
