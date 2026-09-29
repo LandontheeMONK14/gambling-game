@@ -8,11 +8,16 @@
     <div class="bankroll-grid">
       <div class="metric-card">
         <span>Player chips</span>
-        <strong id="player-balance">0</strong>
+        <strong><span id="player-balance">0</span> <span id="balance-delta" class="balance-delta" aria-hidden="true"></span></strong>
       </div>
       <div class="metric-card">
         <span>Casino funds</span>
         <strong id="casino-funds">0</strong>
+      </div>
+      <div class="metric-card challenge-metric">
+        <span>Challenge card</span>
+        <strong id="challenge-meter">0 / 3</strong>
+        <a href="#challenge-card" class="metric-link">View challenges &amp; themes</a>
       </div>
     </div>
   </header>
@@ -409,6 +414,30 @@
     </section>
 
     <aside class="side-column">
+      <section id="challenge-card" class="panel challenge-card" aria-labelledby="challenge-title" tabindex="-1">
+        <div class="panel-header">
+          <div>
+            <p class="eyebrow">Optional · just for fun</p>
+            <h2 id="challenge-title">Arcade challenge card</h2>
+          </div>
+          <span id="challenge-set-label" class="payout-chip">Set 1</span>
+        </div>
+        <p class="muted small">Short goals for exploring the floor. Any stake counts — even 1 chip. No timers, no streaks; rewards are cosmetic themes only.</p>
+        <ol id="challenge-list" class="challenge-list"></ol>
+        <p id="challenge-summary" class="status small"></p>
+        <button id="challenge-new" class="secondary">Swap for a new challenge set</button>
+      </section>
+      <section class="panel style-card" aria-labelledby="style-title">
+        <h2 id="style-title">Style &amp; effects</h2>
+        <fieldset id="theme-picker" class="theme-picker">
+          <legend>Theme</legend>
+        </fieldset>
+        <div class="toggle-list">
+          <label class="toggle"><input id="effects-toggle" type="checkbox" checked /> Celebration effects</label>
+          <label class="toggle"><input id="sound-toggle" type="checkbox" /> Sound effects (off by default)</label>
+        </div>
+        <p id="effects-note" class="muted small"></p>
+      </section>
       <section class="panel">
         <h2>Session stats</h2>
         <p id="stats-summary" class="muted">No rounds played yet.</p>
@@ -424,6 +453,8 @@
           <li>Works offline with <code>file://</code>.</li>
           <li>Animated actions can be skipped and honor reduced motion.</li>
           <li>Focus styles and live results are built in.</li>
+          <li>Every result shows Win, Push, or Loss with staked, returned, and net chips.</li>
+          <li>Celebrations are optional, never flash, and are skipped under reduced motion. Sound is opt-in.</li>
           <li>No external assets, fonts, or network access required.</li>
         </ul>
       </section>

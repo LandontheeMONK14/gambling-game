@@ -1096,6 +1096,289 @@ export function createDefaultOwnerState() {
   };
 }
 
+export const GAME_ROOMS = {
+  slots: 'machines',
+  scratch: 'machines',
+  blackjack: 'cards',
+  baccarat: 'cards',
+  poker: 'cards',
+  roulette: 'tables',
+  dice: 'tables',
+  craps: 'tables',
+  keno: 'numbers',
+  bingo: 'numbers',
+  horse: 'sportsbook',
+  sports: 'sportsbook',
+};
+
+export const CHALLENGE_SET_SIZE = 3;
+
+// Goals reward exploring and learning each game. None depend on stake size,
+// winning streaks, or long sessions: any 1-chip round counts.
+// `track(event)` returns null (no progress), true (+1), or a key (distinct goals with `keys`).
+export const CHALLENGE_POOL = {
+  explorer: {
+    title: 'Floor explorer',
+    description: 'Finish a round in 3 different games.',
+    target: 3,
+    keys: Object.keys(GAME_ROOMS),
+    track: (event) => event.gameKey,
+  },
+  roomHopper: {
+    title: 'Room hopper',
+    description: 'Play in 4 different rooms (Machines, Cards, Tables, Numbers, Sportsbook).',
+    target: 4,
+    keys: ['machines', 'cards', 'tables', 'numbers', 'sportsbook'],
+    track: (event) => GAME_ROOMS[event.gameKey] ?? null,
+  },
+  blackjackFinish: {
+    title: 'Card sharp',
+    description: 'Complete a blackjack hand — any result counts.',
+    target: 1,
+    track: (event) => event.gameKey === 'blackjack' || null,
+  },
+  blackjackStand: {
+    title: 'Hold your nerve',
+    description: 'Stand in blackjack and watch the dealer play out their hand.',
+    target: 1,
+    track: (event) => (event.gameKey === 'blackjack' && event.detail?.stood) || null,
+  },
+  diceProfit: {
+    title: 'Cash-out instinct',
+    description: 'Bank a Risk Dice round with profit before busting.',
+    target: 1,
+    track: (event) => (event.gameKey === 'dice' && event.totalReturn > event.stake) || null,
+  },
+  pokerHold: {
+    title: 'Keep the good ones',
+    description: 'Draw in video poker while holding at least one card.',
+    target: 1,
+    track: (event) => (event.gameKey === 'poker' && event.detail?.held > 0) || null,
+  },
+  rouletteTypes: {
+    title: 'Wheel scholar',
+    description: 'Try 2 different roulette bet types.',
+    target: 2,
+    keys: Object.keys(ROULETTE_BETS),
+    track: (event) => (event.gameKey === 'roulette' ? event.detail?.betType : null),
+  },
+  crapsSides: {
+    title: 'Both sides of the rail',
+    description: "Play a craps round on the pass line and one on don't pass.",
+    target: 2,
+    keys: ['pass', 'dont-pass'],
+    track: (event) => (event.gameKey === 'craps' ? event.detail?.side : null),
+  },
+  baccaratSides: {
+    title: 'Pick a side',
+    description: 'Try 2 different baccarat bets (player, banker, or tie).',
+    target: 2,
+    keys: ['player', 'banker', 'tie'],
+    track: (event) => (event.gameKey === 'baccarat' ? event.detail?.betOn : null),
+  },
+  numberCruncher: {
+    title: 'Number cruncher',
+    description: 'Finish a keno draw and a speed bingo card.',
+    target: 2,
+    keys: ['keno', 'bingo'],
+    track: (event) => event.gameKey,
+  },
+  scratchAll: {
+    title: 'Scratch it all',
+    description: 'Reveal every panel on a scratch ticket.',
+    target: 1,
+    track: (event) => event.gameKey === 'scratch' || null,
+  },
+  sportsFan: {
+    title: 'Fan of everything',
+    description: 'Run a horse race and an arena match in the sportsbook.',
+    target: 2,
+    keys: ['horse', 'sports'],
+    track: (event) => event.gameKey,
+  },
+  reelCurious: {
+    title: 'Reel curious',
+    description: 'Spin Crystal Slots twice.',
+    target: 2,
+    track: (event) => event.gameKey === 'slots' || null,
+  },
+};
+
+export const STARTER_CHALLENGE_IDS = ['explorer', 'blackjackFinish', 'diceProfit'];
+
+// Cosmetic only: themes never touch odds, paytables, or chip accounting.
+export const COSMETIC_THEMES = {
+  neon: { label: 'Neon Cascade', requires: 0 },
+  sunset: { label: 'Sunset Strip', requires: 2 },
+  aurora: { label: 'Aurora Lights', requires: 4 },
+  synthwave: { label: 'Synthwave Grid', requires: 6 },
+  gold: { label: 'Midnight Gold', requires: 9 },
+};
+
+export const DEFAULT_THEME = 'neon';
+
+function createChallengeGoal(id) {
+  return { id, progress: 0, done: false, seen: [] };
+}
+
+export function createDefaultChallengeState() {
+  return {
+    setNumber: 1,
+    goals: STARTER_CHALLENGE_IDS.map(createChallengeGoal),
+    lastRoundId: 0,
+    completedTotal: 0,
+    setsCompleted: 0,
+  };
+}
+
+export function createDefaultCosmetics() {
+  return { theme: DEFAULT_THEME, effects: true, sound: false };
+}
+
+export function sanitizeChallengeState(raw, roundsPlayed = Infinity) {
+  const safe = createDefaultChallengeState();
+  if (!raw || typeof raw !== 'object') return safe;
+
+  const counter = (value) => clamp(normalizeWholeChips(value), 0, 100000);
+  safe.completedTotal = counter(raw.completedTotal);
+  safe.setsCompleted = counter(raw.setsCompleted);
+  safe.setNumber = Math.max(1, counter(raw.setNumber));
+  // Round ids come from stats.rounds, so a saved id can never be ahead of the round counter.
+  safe.lastRoundId = Math.min(counter(raw.lastRoundId), Number.isFinite(roundsPlayed) ? normalizeWholeChips(roundsPlayed) : Infinity);
+
+  const goals = [];
+  if (Array.isArray(raw.goals)) {
+    for (const entry of raw.goals) {
+      if (!entry || typeof entry !== 'object') continue;
+      const definition = CHALLENGE_POOL[entry.id];
+      if (!definition || goals.some((goal) => goal.id === entry.id)) continue;
+      const goal = createChallengeGoal(entry.id);
+      if (definition.keys) {
+        const seen = Array.isArray(entry.seen) ? entry.seen : [];
+        goal.seen = [...new Set(seen.filter((key) => definition.keys.includes(key)))].slice(0, definition.target);
+        goal.progress = goal.seen.length;
+      } else {
+        goal.progress = clamp(normalizeWholeChips(entry.progress), 0, definition.target);
+      }
+      goal.done = goal.progress >= definition.target;
+      goals.push(goal);
+      if (goals.length === CHALLENGE_SET_SIZE) break;
+    }
+  }
+  if (goals.length === CHALLENGE_SET_SIZE) safe.goals = goals;
+  safe.completedTotal = Math.max(safe.completedTotal, safe.goals.filter((goal) => goal.done).length);
+  return safe;
+}
+
+export function isChallengeSetComplete(challenges) {
+  return Boolean(challenges?.goals?.length) && challenges.goals.every((goal) => goal.done);
+}
+
+export function unlockedThemeIds(completedTotal) {
+  return Object.entries(COSMETIC_THEMES)
+    .filter(([, theme]) => theme.requires <= normalizeWholeChips(completedTotal))
+    .map(([id]) => id);
+}
+
+export function isThemeUnlocked(themeId, completedTotal) {
+  return Object.hasOwn(COSMETIC_THEMES, themeId) && unlockedThemeIds(completedTotal).includes(themeId);
+}
+
+export function sanitizeCosmetics(raw, completedTotal = 0) {
+  const safe = createDefaultCosmetics();
+  if (!raw || typeof raw !== 'object') return safe;
+  if (isThemeUnlocked(raw.theme, completedTotal)) safe.theme = raw.theme;
+  safe.effects = raw.effects !== false;
+  safe.sound = raw.sound === true;
+  return safe;
+}
+
+export function selectTheme(cosmetics, themeId, completedTotal) {
+  const safe = sanitizeCosmetics(cosmetics, completedTotal);
+  if (!Object.hasOwn(COSMETIC_THEMES, themeId)) return { ok: false, error: 'Unknown theme.', cosmetics: safe };
+  if (!isThemeUnlocked(themeId, completedTotal)) {
+    return { ok: false, error: `${COSMETIC_THEMES[themeId].label} is still locked.`, cosmetics: safe };
+  }
+  return { ok: true, cosmetics: { ...safe, theme: themeId } };
+}
+
+export function applyRoundToChallenges(rawChallenges, event) {
+  const challenges = sanitizeChallengeState(rawChallenges);
+  const roundId = Number(event?.roundId);
+  const unchanged = { challenges, ignored: true, newlyCompleted: [], setCompleted: false, unlockedThemes: [] };
+  // Each settled round has a unique, increasing id; replays and stale callbacks are ignored.
+  if (!Number.isInteger(roundId) || roundId <= challenges.lastRoundId) return unchanged;
+
+  const before = challenges.completedTotal;
+  const wasComplete = isChallengeSetComplete(challenges);
+  const newlyCompleted = [];
+  challenges.lastRoundId = roundId;
+
+  for (const goal of challenges.goals) {
+    if (goal.done) continue;
+    const definition = CHALLENGE_POOL[goal.id];
+    const key = definition.track(event);
+    if (key == null || key === false) continue;
+    if (definition.keys) {
+      if (!definition.keys.includes(key) || goal.seen.includes(key)) continue;
+      goal.seen = [...goal.seen, key];
+      goal.progress = goal.seen.length;
+    } else {
+      goal.progress = Math.min(definition.target, goal.progress + 1);
+    }
+    if (goal.progress >= definition.target) {
+      goal.done = true;
+      challenges.completedTotal += 1;
+      newlyCompleted.push(goal.id);
+    }
+  }
+
+  const setCompleted = !wasComplete && isChallengeSetComplete(challenges);
+  if (setCompleted) challenges.setsCompleted += 1;
+  const unlockedThemes = Object.entries(COSMETIC_THEMES)
+    .filter(([, theme]) => theme.requires > before && theme.requires <= challenges.completedTotal)
+    .map(([id]) => id);
+
+  return { challenges, ignored: false, newlyCompleted, setCompleted, unlockedThemes };
+}
+
+export function startNewChallengeSet(rawChallenges, rng = Math.random) {
+  const current = sanitizeChallengeState(rawChallenges);
+  const currentIds = new Set(current.goals.map((goal) => goal.id));
+  const fresh = Object.keys(CHALLENGE_POOL).filter((id) => !currentIds.has(id));
+  const picked = uniqueDraw(fresh, CHALLENGE_SET_SIZE, rng);
+  return {
+    ...current,
+    setNumber: current.setNumber + 1,
+    goals: picked.map(createChallengeGoal),
+  };
+}
+
+export function summarizeRound({ outcome, stake, totalReturn }) {
+  const staked = normalizeWholeChips(stake);
+  const returned = normalizeWholeChips(totalReturn);
+  const net = returned - staked;
+  // Result labels are net-based so a returned stake is never presented as a win.
+  const kind = net > 0 ? 'win' : net < 0 ? 'loss' : 'even';
+  const label =
+    kind === 'win'
+      ? `Win +${net}`
+      : kind === 'loss'
+        ? `Loss −${Math.abs(net)}`
+        : outcome === 'push'
+          ? 'Push ±0'
+          : 'Stake back ±0';
+  return {
+    kind,
+    net,
+    staked,
+    returned,
+    label,
+    big: kind === 'win' && net >= staked * 5,
+    detail: `Staked ${staked} · Returned ${returned} · Net ${net >= 0 ? '+' : '−'}${Math.abs(net)} chips`,
+  };
+}
+
 export function createDefaultAppState() {
   return {
     playerChips: STARTING_PLAYER_CHIPS,
@@ -1109,6 +1392,8 @@ export function createDefaultAppState() {
     },
     history: [],
     owner: createDefaultOwnerState(),
+    challenges: createDefaultChallengeState(),
+    cosmetics: createDefaultCosmetics(),
   };
 }
 
@@ -1360,6 +1645,8 @@ export function sanitizeAppState(rawState) {
   }
   safe.history = sanitizeHistory(rawState.history ?? rawState.recentResults);
   safe.owner = sanitizeOwnerState(rawState.owner);
+  safe.challenges = sanitizeChallengeState(rawState.challenges, safe.stats.rounds);
+  safe.cosmetics = sanitizeCosmetics(rawState.cosmetics, safe.challenges.completedTotal);
   return safe;
 }
 
@@ -1384,6 +1671,8 @@ export function sanitizePersistedSnapshot(state) {
     stats: safe.stats,
     history: safe.history,
     owner: safe.owner,
+    challenges: safe.challenges,
+    cosmetics: safe.cosmetics,
   };
 }
 
