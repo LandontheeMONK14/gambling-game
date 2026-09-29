@@ -891,6 +891,7 @@ function togglePokerHold(index) {
 }
 
 function drawPoker() {
+  const heldCount = state.ui.pokerHold.size;
   const next = Engine.drawVideoPoker(state.ui.pokerRound, [...state.ui.pokerHold]);
   if (next?.ignored) return;
   state.ui.pokerRound = next;
@@ -905,7 +906,7 @@ function drawPoker() {
     totalReturn: next.totalReturn,
     text: next.message,
     statusEl: els.pokerStatus,
-    detail: { held: state.ui.pokerHold.size },
+    detail: { held: heldCount },
   });
   persist();
   renderHud();

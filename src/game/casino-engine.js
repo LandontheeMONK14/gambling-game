@@ -1354,6 +1354,8 @@ export function startNewChallengeSet(rawChallenges, rng = Math.random) {
   };
 }
 
+export const BIG_WIN_NET_MULTIPLIER = 5;
+
 export function summarizeRound({ outcome, stake, totalReturn }) {
   const staked = normalizeWholeChips(stake);
   const returned = normalizeWholeChips(totalReturn);
@@ -1374,7 +1376,7 @@ export function summarizeRound({ outcome, stake, totalReturn }) {
     staked,
     returned,
     label,
-    big: kind === 'win' && net >= staked * 5,
+    big: kind === 'win' && net >= staked * BIG_WIN_NET_MULTIPLIER,
     detail: `Staked ${staked} · Returned ${returned} · Net ${net >= 0 ? '+' : '−'}${Math.abs(net)} chips`,
   };
 }

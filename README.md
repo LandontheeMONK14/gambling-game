@@ -29,7 +29,7 @@ A short card of **3 goals** sits at the top of the sidebar (jump to it from the 
 
 Any stake counts, even 1 chip. Progress does not depend on bet size, winning streaks, or long sessions. There are no timers, daily streaks, or expirations. Each goal shows a native progress bar and a ✓ when complete, and completions are announced to screen readers.
 
-Press **New challenge set** whenever you like to draw 3 different goals from the pool of 13. Swapping an unfinished card discards that card's progress but keeps your lifetime total.
+Press **Swap for a new challenge set** (or **Start new challenge set** once a card is cleared) whenever you like to draw 3 different goals from the pool of 13. Swapping an unfinished card discards that card's progress but keeps your lifetime total.
 
 ### Unlockable themes (cosmetic only)
 
