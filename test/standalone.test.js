@@ -271,6 +271,8 @@ describe('challenges, themes, and celebrations in the standalone app', () => {
       expect(casino.$('#slots-status .result-badge').textContent).toBe('Win +100');
       expect(casino.$('#slots-status').textContent).toContain('Staked 10 · Returned 110 · Net +100 chips');
       expect(casino.$('#slots-status').classList.contains('good')).toBe(true);
+      const reels = [...casino.document.querySelectorAll('#slot-reels .slot-reel')].map((reel) => reel.getAttribute('aria-label'));
+      expect(reels).toEqual(['crown', 'crown', 'crown']);
       expect(casino.saved().stats).toMatchObject({ rounds: 1, wins: 1, totalStaked: 10, totalReturned: 110 });
     }
   });

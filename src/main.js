@@ -17,6 +17,7 @@ const state = {
     storageAvailable: loaded.storageAvailable,
     migrated: loaded.migrated,
     slotsRound: null,
+    slotsLastSymbols: ['crown', 'gem', 'bell'],
     blackjackRound: null,
     blackjackShoe: Engine.createShoe(4),
     baccaratShoe: Engine.createShoe(6),
@@ -505,7 +506,7 @@ function slotSymbolSvg(symbol) {
     star: '<svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#c4b5fd" d="m32 8 7.6 15.4L56 25.7 44 37.4l2.8 16.5L32 46 17.2 53.9 20 37.4 8 25.7l16.4-2.3L32 8Z"/></svg>',
     horseshoe: '<svg viewBox="0 0 64 64" aria-hidden="true"><path fill="#86efac" d="M18 20a14 14 0 1 1 28 0v24a6 6 0 0 0 6 6h4v8h-4a14 14 0 0 1-14-14V20a6 6 0 1 0-12 0v24A14 14 0 0 1 12 58H8v-8h4a6 6 0 0 0 6-6V20Z"/></svg>',
   };
-  return `<div class="slot-reel">${svgs[symbol] ?? symbol}</div>`;
+  return `<div class="slot-reel" role="img" aria-label="${escapeHtml(symbol)}">${svgs[symbol] ?? escapeHtml(symbol)}</div>`;
 }
 
 function renderDie(value) {
@@ -669,7 +670,7 @@ function renderSidebar() {
 
 function renderSlots() {
   const round = state.ui.slotsRound;
-  const symbols = round?.symbols ?? ['crown', 'gem', 'bell'];
+  const symbols = round?.symbols ?? state.ui.slotsLastSymbols;
   els.slotReels.classList.toggle('spinning', Boolean(round?.spinning) && !prefersReducedMotion);
   els.slotReels.innerHTML = symbols.map((symbol) => slotSymbolSvg(symbol)).join('');
   els.slotsSpin.disabled = Boolean(round?.spinning);
@@ -679,6 +680,7 @@ function renderSlots() {
 function settleSlotRound(round) {
   if (!round) return;
   const result = Engine.evaluateSlots(round.symbols, round.stake);
+  state.ui.slotsLastSymbols = round.symbols;
   state.ui.slotsRound = null;
   renderSlots();
   if (result.won) {
