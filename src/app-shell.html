@@ -1,0 +1,434 @@
+<div class="page-shell">
+  <header class="hero panel">
+    <div>
+      <p class="eyebrow">FREE FICTIONAL CHIPS ONLY</p>
+      <h1>Lucky Cascade Casino</h1>
+      <p class="lede">A single-file offline casino simulator with classic games, a management mode, and zero real-money features.</p>
+    </div>
+    <div class="bankroll-grid">
+      <div class="metric-card">
+        <span>Player chips</span>
+        <strong id="player-balance">0</strong>
+      </div>
+      <div class="metric-card">
+        <span>Casino funds</span>
+        <strong id="casino-funds">0</strong>
+      </div>
+    </div>
+  </header>
+
+  <section class="panel action-strip">
+    <div class="stack">
+      <label for="stake-input">Stake for games</label>
+      <input id="stake-input" type="number" min="1" step="1" value="25" />
+    </div>
+    <div class="stack compact">
+      <span class="label">Save behavior</span>
+      <p id="save-status" class="muted">Checking browser storage…</p>
+    </div>
+    <div class="button-cluster">
+      <button id="refill-player">Free player refill</button>
+      <button id="reset-progress" class="secondary">Reset all progress</button>
+      <button id="download-html" class="secondary">Download HTML</button>
+    </div>
+    <p class="muted note">Download is a clean standalone document. Saves stay local to each browser/location and are not packaged into the downloaded file.</p>
+  </section>
+
+  <section class="panel rules-grid">
+    <article>
+      <h2>Included games</h2>
+      <p>Slots, blackjack, risk dice, roulette, baccarat, craps, five-card draw video poker, keno, speed bingo, scratch cards, and a fictional horse-and-sports book.</p>
+    </article>
+    <article>
+      <h2>Core safeguards</h2>
+      <p>Only whole-chip stakes are accepted. Stakes are deducted once, resolved once, pushes return the original stake, and active rounds are not saved to prevent reload exploits.</p>
+    </article>
+    <article>
+      <h2>Owner mode</h2>
+      <p>Start a casino, install attractions, hire staff, buy upgrades, tune operations, run business days, and keep casino funds separate from your player bankroll.</p>
+    </article>
+  </section>
+
+  <nav class="panel game-nav" aria-label="Casino game categories">
+    <button class="nav-btn active" data-game="slots">Machines<br /><small>Slots & scratchers</small></button>
+    <button class="nav-btn" data-game="blackjack">Cards<br /><small>Blackjack, baccarat, poker</small></button>
+    <button class="nav-btn" data-game="roulette">Tables<br /><small>Roulette, craps, dice</small></button>
+    <button class="nav-btn" data-game="keno">Numbers<br /><small>Keno & bingo</small></button>
+    <button class="nav-btn" data-game="sportsbook">Sportsbook<br /><small>Horse racing & sports</small></button>
+    <button class="nav-btn" data-game="owner">Start My Casino<br /><small>Owner management</small></button>
+  </nav>
+
+  <main class="content-grid">
+    <section class="main-column">
+      <section id="panel-slots" class="panel game-panel">
+        <div class="panel-header">
+          <div>
+            <h2>Crystal Slots</h2>
+            <p class="muted">Three reels, uniform random symbols, and profit multipliers for matching all three.</p>
+          </div>
+          <div class="payout-chip">Profit paytable</div>
+        </div>
+        <div id="slot-reels" class="slot-reels" aria-live="polite"></div>
+        <div class="button-cluster">
+          <button id="slots-spin">Spin reels</button>
+          <button id="slots-skip" class="secondary" hidden>Skip animation</button>
+        </div>
+        <table>
+          <caption>Crystal Slots paytable</caption>
+          <tbody id="slots-paytable"></tbody>
+        </table>
+        <p id="slots-status" class="status"></p>
+
+        <div class="subgame-divider"></div>
+        <div class="panel-header">
+          <div>
+            <h3>Scratch Cards</h3>
+            <p class="muted">Reveal all nine panels. The highest triple wins. Tickets pay once only.</p>
+          </div>
+        </div>
+        <div class="button-cluster">
+          <button id="scratch-buy">Buy ticket</button>
+        </div>
+        <div id="scratch-grid" class="scratch-grid" aria-live="polite"></div>
+        <table>
+          <caption>Scratch paytable</caption>
+          <tbody id="scratch-paytable"></tbody>
+        </table>
+        <p id="scratch-status" class="status"></p>
+      </section>
+
+      <section id="panel-blackjack" class="panel game-panel" hidden>
+        <div class="panel-header">
+          <div>
+            <h2>Blackjack</h2>
+            <p class="muted">Simplified shoe game. Dealer stands on all 17. No split, double, or insurance.</p>
+          </div>
+          <div class="payout-chip">Natural pays 3:2</div>
+        </div>
+        <div class="hand-grid">
+          <article>
+            <h3>Dealer</h3>
+            <div id="blackjack-dealer" class="card-row"></div>
+            <p id="blackjack-dealer-score" class="muted"></p>
+          </article>
+          <article>
+            <h3>Player</h3>
+            <div id="blackjack-player" class="card-row"></div>
+            <p id="blackjack-player-score" class="muted"></p>
+          </article>
+        </div>
+        <div class="button-cluster">
+          <button id="blackjack-deal">Deal</button>
+          <button id="blackjack-hit" class="secondary" disabled>Hit</button>
+          <button id="blackjack-stand" class="secondary" disabled>Stand</button>
+        </div>
+        <p id="blackjack-status" class="status"></p>
+
+        <div class="subgame-divider"></div>
+        <div class="panel-header">
+          <div>
+            <h3>Baccarat</h3>
+            <p class="muted">Standard draw rules. Player pays 1:1, banker pays 0.95:1, tie pays 8:1, non-tie bets push on ties.</p>
+          </div>
+        </div>
+        <div class="button-cluster wrap">
+          <button class="baccarat-bet" data-bet="player">Bet Player</button>
+          <button class="baccarat-bet secondary" data-bet="banker">Bet Banker</button>
+          <button class="baccarat-bet secondary" data-bet="tie">Bet Tie</button>
+        </div>
+        <div class="hand-grid compact-hands">
+          <article>
+            <h4>Player</h4>
+            <div id="baccarat-player" class="card-row"></div>
+            <p id="baccarat-player-score" class="muted"></p>
+          </article>
+          <article>
+            <h4>Banker</h4>
+            <div id="baccarat-banker" class="card-row"></div>
+            <p id="baccarat-banker-score" class="muted"></p>
+          </article>
+        </div>
+        <p id="baccarat-status" class="status"></p>
+
+        <div class="subgame-divider"></div>
+        <div class="panel-header">
+          <div>
+            <h3>Video Poker</h3>
+            <p class="muted">Five-card draw, one draw only, simplified Jacks or Better paytable using profit multipliers.</p>
+          </div>
+        </div>
+        <div id="poker-cards" class="card-row poker-row" aria-live="polite"></div>
+        <div id="poker-holds" class="button-cluster wrap"></div>
+        <div class="button-cluster">
+          <button id="poker-deal">Deal hand</button>
+          <button id="poker-draw" class="secondary" disabled>Draw selected</button>
+        </div>
+        <table>
+          <caption>Video poker paytable</caption>
+          <tbody id="poker-paytable"></tbody>
+        </table>
+        <p id="poker-status" class="status"></p>
+      </section>
+
+      <section id="panel-roulette" class="panel game-panel" hidden>
+        <div class="panel-header">
+          <div>
+            <h2>Roulette</h2>
+            <p class="muted">European wheel with a single zero. Even-money bets lose on zero.</p>
+          </div>
+        </div>
+        <div class="form-grid">
+          <label>
+            Bet type
+            <select id="roulette-type">
+              <option value="color">Color</option>
+              <option value="parity">Even / Odd</option>
+              <option value="dozen">Dozen</option>
+              <option value="straight">Straight up</option>
+            </select>
+          </label>
+          <label>
+            Bet value
+            <select id="roulette-value"></select>
+          </label>
+        </div>
+        <div class="button-cluster">
+          <button id="roulette-spin">Spin wheel</button>
+        </div>
+        <div id="roulette-result" class="roulette-result" aria-live="polite"></div>
+        <table>
+          <caption>Roulette paytable</caption>
+          <tbody>
+            <tr><td>Straight up</td><td>x35</td></tr>
+            <tr><td>Red / Black</td><td>x1</td></tr>
+            <tr><td>Even / Odd</td><td>x1</td></tr>
+            <tr><td>Dozens</td><td>x2</td></tr>
+          </tbody>
+        </table>
+        <p id="roulette-status" class="status"></p>
+
+        <div class="subgame-divider"></div>
+        <div class="panel-header">
+          <div>
+            <h3>Risk Dice</h3>
+            <p class="muted">Bust if you roll at or below the current threshold. Bank any time before that.</p>
+          </div>
+        </div>
+        <div id="dice-face" class="dice-face" aria-live="polite"></div>
+        <div class="button-cluster">
+          <button id="dice-start">Start round</button>
+          <button id="dice-roll" class="secondary" disabled>Roll</button>
+          <button id="dice-bank" class="secondary" disabled>Bank</button>
+        </div>
+        <table>
+          <caption>Risk Dice progression</caption>
+          <tbody id="dice-paytable"></tbody>
+        </table>
+        <p id="dice-status" class="status"></p>
+
+        <div class="subgame-divider"></div>
+        <div class="panel-header">
+          <div>
+            <h3>Craps</h3>
+            <p class="muted">Pass and don't pass only. Come-out rolls and point resolution follow the simplified table rules shown below.</p>
+          </div>
+        </div>
+        <div class="button-cluster wrap">
+          <button class="craps-start" data-side="pass">Start pass line</button>
+          <button class="craps-start secondary" data-side="dont-pass">Start don't pass</button>
+          <button id="craps-roll" class="secondary" disabled>Roll dice</button>
+        </div>
+        <div id="craps-dice" class="dice-pair"></div>
+        <table>
+          <caption>Craps quick rules</caption>
+          <tbody>
+            <tr><td>Pass line</td><td>Wins on 7 or 11, loses on 2, 3, or 12, otherwise a point is set.</td></tr>
+            <tr><td>Don't pass</td><td>Wins on 2 or 3, pushes on 12, loses on 7 or 11, otherwise waits for 7 before the point.</td></tr>
+          </tbody>
+        </table>
+        <p id="craps-status" class="status"></p>
+      </section>
+
+      <section id="panel-keno" class="panel game-panel" hidden>
+        <div class="panel-header">
+          <div>
+            <h2>Keno</h2>
+            <p class="muted">Simplified pick-five game on numbers 1–20. The house draws 10 unique numbers.</p>
+          </div>
+        </div>
+        <div id="keno-grid" class="number-grid"></div>
+        <div class="button-cluster">
+          <button id="keno-draw">Draw keno</button>
+          <button id="keno-clear" class="secondary">Clear picks</button>
+        </div>
+        <table>
+          <caption>Keno paytable for 5 picks</caption>
+          <tbody>
+            <tr><td>2 hits</td><td>x1</td></tr>
+            <tr><td>3 hits</td><td>x3</td></tr>
+            <tr><td>4 hits</td><td>x10</td></tr>
+            <tr><td>5 hits</td><td>x25</td></tr>
+          </tbody>
+        </table>
+        <p id="keno-status" class="status"></p>
+        <div id="keno-results" class="pill-row"></div>
+
+        <div class="subgame-divider"></div>
+        <div class="panel-header">
+          <div>
+            <h3>Speed Bingo</h3>
+            <p class="muted">Each ticket gets 30 calls max. Bingo by call 20 pays x4, by 26 pays x2, by 30 pays x1.</p>
+          </div>
+        </div>
+        <div id="bingo-card" class="bingo-card" aria-live="polite"></div>
+        <div class="button-cluster">
+          <button id="bingo-buy">Buy bingo card</button>
+          <button id="bingo-draw" class="secondary" disabled>Draw next ball</button>
+        </div>
+        <div id="bingo-called" class="pill-row"></div>
+        <p id="bingo-status" class="status"></p>
+      </section>
+
+      <section id="panel-sportsbook" class="panel game-panel" hidden>
+        <div class="panel-header">
+          <div>
+            <h2>Fictional Sportsbook</h2>
+            <p class="muted">Generated horse races and arena matches. Place one stake before running the event. Betting closes once placed.</p>
+          </div>
+        </div>
+        <div class="form-grid">
+          <label>
+            Event type
+            <select id="sportsbook-kind">
+              <option value="horse">Horse race</option>
+              <option value="sports">Arena match</option>
+            </select>
+          </label>
+          <label>
+            Selection
+            <select id="sportsbook-selection"></select>
+          </label>
+        </div>
+        <div class="event-card">
+          <h3 id="sportsbook-title"></h3>
+          <p id="sportsbook-description" class="muted"></p>
+          <div id="sportsbook-options" class="option-list"></div>
+        </div>
+        <div class="button-cluster wrap">
+          <button id="sportsbook-new">Generate event</button>
+          <button id="sportsbook-bet">Place bet</button>
+          <button id="sportsbook-run" class="secondary" disabled>Run event</button>
+        </div>
+        <p id="sportsbook-status" class="status"></p>
+      </section>
+
+      <section id="panel-owner" class="panel game-panel" hidden>
+        <div class="panel-header">
+          <div>
+            <h2>Start My Casino</h2>
+            <p class="muted">Owner mode uses a separate casino treasury. Move chips explicitly between your bankroll and the business.</p>
+          </div>
+        </div>
+        <div class="form-grid owner-setup">
+          <label>
+            Owner name
+            <input id="owner-name" type="text" maxlength="24" placeholder="Alex Rivera" />
+          </label>
+          <label>
+            Casino name
+            <input id="casino-name" type="text" maxlength="32" placeholder="Cascade Palace" />
+          </label>
+          <div class="button-cluster inline-end">
+            <button id="owner-establish">Establish casino</button>
+          </div>
+        </div>
+
+        <div class="owner-summary-grid">
+          <article class="mini-panel">
+            <h3>Identity</h3>
+            <p id="owner-summary-name">No casino established yet.</p>
+          </article>
+          <article class="mini-panel">
+            <h3>Transfers</h3>
+            <div class="form-grid compact-grid">
+              <label>
+                Chips
+                <input id="transfer-amount" type="number" min="1" step="1" value="100" />
+              </label>
+              <div class="button-cluster wrap">
+                <button id="transfer-to-casino">Player → Casino</button>
+                <button id="transfer-to-player" class="secondary">Casino → Player</button>
+              </div>
+            </div>
+          </article>
+          <article class="mini-panel">
+            <h3>Last day</h3>
+            <p id="owner-last-day">Run your first day to see visitors, revenue, expenses, and profit.</p>
+          </article>
+        </div>
+
+        <div class="owner-columns">
+          <article>
+            <h3>Install attractions</h3>
+            <div id="owner-installations" class="catalog-list"></div>
+          </article>
+          <article>
+            <h3>Hire staff</h3>
+            <div id="owner-staff" class="catalog-list"></div>
+          </article>
+          <article>
+            <h3>Buy upgrades</h3>
+            <div id="owner-upgrades" class="catalog-list"></div>
+          </article>
+        </div>
+
+        <div class="owner-columns settings-columns">
+          <article>
+            <h3>Operating settings</h3>
+            <div class="setting-row">
+              <label for="setting-marketing">Marketing</label>
+              <input id="setting-marketing" type="range" min="0" max="3" step="1" />
+            </div>
+            <div class="setting-row">
+              <label for="setting-hospitality">Hospitality</label>
+              <input id="setting-hospitality" type="range" min="0" max="3" step="1" />
+            </div>
+            <div class="setting-row">
+              <label for="setting-maintenance">Maintenance</label>
+              <input id="setting-maintenance" type="range" min="0" max="3" step="1" />
+            </div>
+            <button id="owner-run-day">Run business day</button>
+          </article>
+          <article>
+            <h3>Performance</h3>
+            <ul id="owner-metrics" class="metric-list"></ul>
+          </article>
+        </div>
+        <p id="owner-status" class="status"></p>
+      </section>
+    </section>
+
+    <aside class="side-column">
+      <section class="panel">
+        <h2>Session stats</h2>
+        <p id="stats-summary" class="muted">No rounds played yet.</p>
+        <ul id="stats-breakdown" class="metric-list"></ul>
+      </section>
+      <section class="panel">
+        <h2>Recent results</h2>
+        <ul id="history-list" class="history-list"></ul>
+      </section>
+      <section class="panel">
+        <h2>Accessibility & controls</h2>
+        <ul class="plain-list">
+          <li>Works offline with <code>file://</code>.</li>
+          <li>Animated actions can be skipped and honor reduced motion.</li>
+          <li>Focus styles and live results are built in.</li>
+          <li>No external assets, fonts, or network access required.</li>
+        </ul>
+      </section>
+    </aside>
+  </main>
+
+  <p id="global-status" class="sr-only" aria-live="polite"></p>
+</div>
